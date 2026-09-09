@@ -9,17 +9,20 @@ main:
 	fin_prog:
 		beq zero, zero, fin_prog
     ca2_bcd:
+
+	addi sp, sp, -24          #separar espacio stack
+    sw   s0, 20(sp)
+    sw   s1, 16(sp)
+    sw   s2, 12(sp)
+    sw   s3, 8(sp)
+    sw   s4, 4(sp)
+    sw   ra, 0(sp)			  #guardar ra por el uso de otras funciones
+
     add s0, a0, zero
     add s1, a1, zero
     la  s2, cte_div       #cargar arrays
     add s4, s1, zero
-
-    addi sp, sp, -12        #separar espacio stack
-
-    sw     s0, 8(sp)
-    sw     s1, 4(sp)
-    sw   ra, 0(sp)                #guardar ra por el uso de otras funciones
-
+                
     bge   s0, zero, positivo
 	sub   s0, zero, s0
     addi  s3, zero, 1         #s3 es el flag de negativo
@@ -41,6 +44,9 @@ main:
         add   t4, t4, t4           
         add   t4, t4, s4           # base + offset
         sw    a0, 0(t4)            # resultado_bcd[i]
+		
+		add   a0, s0, zero         # recargar dividendo original
+        lw    a1, 0(t2)            # recargar divisor 
 
         jal residuo
         add   s0, a0, zero
@@ -49,10 +55,13 @@ main:
         beq zero, zero, array   
 
 	fin_array:
-    lw     s0, 8(sp)
-    lw     s1, 4(sp)
+    lw     s0, 20(sp)
+    lw     s1, 16(sp)
+    lw     s2, 12(sp)
+    lw     s3, 8(sp)
+    lw     s4, 4(sp)
     lw     ra, 0(sp)
-    addi sp, sp, 12
+    addi sp, sp, 24
     add  a0, s1, zero
     jr ra
 	
@@ -74,6 +83,8 @@ residuo:
     end2:
         add a0, a0, zero
         jr ra
+		
+		
 .data
 prueba: .word -2147483647
 cte_div: .word 1000000000,100000000, 10000000, 1000000, 100000, 10000, 1000, 100, 10, 1
