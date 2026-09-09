@@ -1,0 +1,83 @@
+.global _start
+_start:
+
+.text
+main:
+	la   sp, pila
+	addi  sp, sp, -8
+    lw    s0, prueba
+	addi  a0, s0, 0     
+    jal   x0, ca2_bcd   
+	#devolver el arreglo o devolver el signo
+	
+		beq   zero, zero, fin_array
+	
+	
+ca2_bcd:
+	sw   s0, 0(sp)
+	bge   s0, zero, nonegativo 
+	sub   s0, zero, s0
+	addi  s1, zero, 1 #s1 es el flag de negativo
+	
+nonegativo:
+	la    s2, cte_div       #cargar arrays
+	sw    s2, 4(sp)
+	la 	  s3, resultado_bcd 
+    addi  t0, zero, 0       # contador
+    addi  t1, zero, 10		
+	array:
+    	beq   t0, t1, fin_array   # i == 10
+    	add   t2, t0, t0          
+    	add   t2, t2, t2           # 4*i  offset 
+    	add   t2, t2, s2           # base + offset  
+    	lw    t3, 0(t2)            # cte_div[i] 
+		
+		
+		
+		add   a0, s0, zero
+		add   a1, t3, zero
+		jal cociente	
+		add	  t4, a0, zero
+		
+		add   t5, t0, t0
+    	add   t5, t5, t5           
+    	add   t5, t5, s3           # base + offset
+    	sw    t4, 0(t5) 		   # t5 =resultado_bcd[i]
+		
+		add   a0, s0, zero
+		add   a1, t3, zero
+		jal residuo
+		add   s0, a0, zero		   #nuevo s0 al restarle el digito
+		
+    	addi  t0, t0, 1            # i++
+    	beq zero, zero, array 
+		fin_array:
+	lw  s0, 0(sp)
+	lw  s2, 4(sp)
+		
+cociente:
+	add t1, zero, zero
+	for1:
+		blt a0, a1, end1
+		sub a0, a0, a1
+		addi t1, t1, 1 
+		beq   zero, zero, for1
+	end1:
+	add a0, t1, zero
+	jr ra
+
+residuo:
+	for2:
+		blt a0, a1, end2
+		sub a0, a0, a1
+		beq   zero, zero, for2
+	end2:
+	add a0, a0, zero
+	jr ra
+
+.data
+prueba: .word -1234567
+cte_div: .word 1000000000,100000000, 10000000, 1000000, 100000, 10000, 1000, 100, 10, 1
+resultado_bcd: .word 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 
+.space 256             
+pila: 
