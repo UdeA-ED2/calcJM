@@ -33,11 +33,11 @@ main:
                 
     bge   s0, zero, positivo
 	sub   s0, zero, s0
-    addi  s3, zero, 1         #s3 es el flag de negativo
-	la    t5, signo_flag
-    sw    s3, 0(t5)
+    
+	addi  t5, zero, 1
+    sw    t5, 0(s1)
     positivo:
-		addi  t0, zero, 0       # contador
+		addi  t0, zero, 1       # contador
 		addi  t1, zero, 10    
 		array:
 			beq   t1, t0, fin_array   # i == 10
@@ -65,6 +65,14 @@ main:
 			beq zero, zero, array   
 
 		fin_array:
+			addi t5, zero, 46
+    		sw   t5, 48(s1)    
+			sw zero, 52(s1)     # resultado_bcd[13]  = 0
+    		sw zero, 56(s1)     # resultado_bcd[14]  = 0
+    		sw zero, 60(s1)     # resultado_bcd[15] = 0
+    		sw zero, 64(s1)     # resultado_bcd[16] = 0
+    		sw zero, 68(s1)		## resultado_bcd[17] = 0
+			
 			lw     s0, 20(sp)
 			lw     s1, 16(sp)
 			lw     s2, 12(sp)
@@ -110,17 +118,20 @@ main:
 		sw   ra, 0(sp)
 		
 		add   s0, a0, zero
-		add   s1, zero, 0
-		addi  t0, zero, 0       # contador
-   		addi  t1, zero, 10
+		add   s1, zero, 0		
+		addi  t0, zero, 1       # contador
+		addi  t1, zero, 17
+		addi  s2, zero, 46
+		addi  s3, zero, 0
 		
 		int:
-			beq   t1, t0, fin_int
 			add   t2, t0, t0          
         	add   t2, t2, t2           # 4*i  offset
         	add   t2, t2, s0           # base + offset
 			
 			lw    t3, 0(t2)			   #cargar valor del array
+			
+			beq   t3, s2, fraction
 			
 			addi  a0, s1, 0
 			
@@ -131,16 +142,41 @@ main:
 			addi  t0, t0, 1            # i++
 			beq zero, zero, int
 		
+		fraction:
+			beq   t1, t0, fin_int
+			add   t2, t0, t0          
+        	add   t2, t2, t2           # 4*i  offset
+        	add   t2, t2, s0           # base + offset
+			
+			lw    t3, 0(t2)			   #cargar valor del array
+			
+			addi  a0, s3, 0
+			
+			jal mult10
+			
+			add  s3, a0, t3
+			
+			addi  t0, t0, 1            # i++
+			beq zero, zero, fraction
+
+		
 		fin_int:
-				fcvt.s.w fa0, s1
+				fcvt.s.w  fa0, s1
+				fcvt.s.w  fa1, s3
+				
+				li t0, zero, 100000
+				
+				fcvt.s.w  ft0, t0
+				fdiv.s    fa1, fa1, ft0
+				
+				fadd.s 	  fa0, fa0, fa1
+				
+				lw t6, 0(a0)
+				beq	t6, zero, pos
+				fcvt.s.w ft1, zero     # ft0 = 0.0
+				fsub.s   fa0, ft1, fa0 
 
-				la    t6, signo_flag
-				lw    t6, 0(t6)
-				beq   t6, zero, sin_negar
-				fcvt.s.w ft0, zero     # ft0 = 0.0
-				fsub.s   fa0, ft0, fa0 
-
-			sin_negar:
+			pos:
 				
 				lw   s0, 12(sp)
 				lw   s1, 8(sp)
@@ -154,5 +190,4 @@ main:
 .data
 prueba: .word -2147483647
 cte_div: .word 1000000000,100000000, 10000000, 1000000, 100000, 10000, 1000, 100, 10, 1
-resultado_bcd: .word 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-signo_flag: .word 0
+resultado_bcd: .word 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
