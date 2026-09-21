@@ -37,8 +37,9 @@ main:
 	addi  t5, zero, 1
     sw    t5, 0(s1)
     positivo:
-		addi  t0, zero, 1       # contador
+		addi  t0, zero, 0       # contador
 		addi  t1, zero, 10    
+		addi  t6, zero, 1 
 		array:
 			beq   t1, t0, fin_array   # i == 10
 			add   t2, t0, t0          
@@ -50,7 +51,7 @@ main:
 
 			jal cociente
 
-			add   t4, t0, t0
+			add   t4, t6, t6
 			add   t4, t4, t4           
 			add   t4, t4, s4           # base + offset
 			sw    a0, 0(t4)            # resultado_bcd[i]
@@ -62,16 +63,17 @@ main:
 			add   s0, a0, zero
 
 			addi  t0, t0, 1            # i++
+			addi  t6, t6, 1
 			beq zero, zero, array   
 
 		fin_array:
 			addi t5, zero, 46
-    		sw   t5, 48(s1)    
-			sw zero, 52(s1)     # resultado_bcd[13]  = 0
-    		sw zero, 56(s1)     # resultado_bcd[14]  = 0
-    		sw zero, 60(s1)     # resultado_bcd[15] = 0
-    		sw zero, 64(s1)     # resultado_bcd[16] = 0
-    		sw zero, 68(s1)		## resultado_bcd[17] = 0
+    		sw   t5, 44(s1)    
+			sw zero, 48(s1)     # resultado_bcd[13]  = 0
+    		sw zero, 52(s1)     # resultado_bcd[14]  = 0
+    		sw zero, 56(s1)     # resultado_bcd[15] = 0
+    		sw zero, 60(s1)     # resultado_bcd[16] = 0
+    		sw zero, 64(s1)		## resultado_bcd[17] = 0
 			
 			lw     s0, 20(sp)
 			lw     s1, 16(sp)
@@ -111,15 +113,16 @@ main:
 		
 
 	bcd_to_float:
-		addi sp, sp, -16          #separar espacio stack
-		sw   s0, 12(sp)
-		sw   s1, 8(sp)
-		sw   s2, 4(sp)
+		addi sp, sp, -20          #separar espacio stack
+		sw   s0, 16(sp)
+		sw   s1, 12(sp)
+		sw   s2, 8(sp)
+		sw   s3, 4(sp)
 		sw   ra, 0(sp)
 		
 		add   s0, a0, zero
 		add   s1, zero, 0		
-		addi  t0, zero, 1       # contador
+		addi  t0, zero, 1       # contador       
 		addi  t1, zero, 17
 		addi  s2, zero, 46
 		addi  s3, zero, 0
@@ -143,6 +146,9 @@ main:
 			beq zero, zero, int
 		
 		fraction:
+		
+			addi  t0, t0, 1            # i++
+			
 			beq   t1, t0, fin_int
 			add   t2, t0, t0          
         	add   t2, t2, t2           # 4*i  offset
@@ -156,7 +162,6 @@ main:
 			
 			add  s3, a0, t3
 			
-			addi  t0, t0, 1            # i++
 			beq zero, zero, fraction
 
 		
@@ -164,7 +169,7 @@ main:
 				fcvt.s.w  fa0, s1
 				fcvt.s.w  fa1, s3
 				
-				li t0, zero, 100000
+				li t0, 100000
 				
 				fcvt.s.w  ft0, t0
 				fdiv.s    fa1, fa1, ft0
@@ -178,11 +183,12 @@ main:
 
 			pos:
 				
-				lw   s0, 12(sp)
-				lw   s1, 8(sp)
-				lw   s2, 4(sp)
+				lw   s0, 16(sp)
+				lw   s1, 12(sp)
+				lw   s2, 8(sp)
+				lw   s3, 4(sp)
 				lw   ra, 0(sp)
-				addi sp, sp, 16
+				addi sp, sp, 20
 				jr ra
 	
 	
@@ -190,4 +196,4 @@ main:
 .data
 prueba: .word -2147483647
 cte_div: .word 1000000000,100000000, 10000000, 1000000, 100000, 10000, 1000, 100, 10, 1
-resultado_bcd: .word 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+resultado_bcd: .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
