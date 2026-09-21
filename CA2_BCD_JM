@@ -4,18 +4,26 @@ _start:
 main:
     addi     sp, zero, 0x600
 	
+	#entero -> BCD
     lw    	 a0, prueba
     la       a1, resultado_bcd 
     jal   ra, ca2_bcd   
 	
+	#BCD -> float
 	la   a0, resultado_bcd 
-	
     jal  ra, bcd_to_float
-	
 	fmv.s fs0, fa0
+	
+	#float -> BCD
+	fmv.s fa0, fs0
+	la    a1, resultado_bcd2
+    jal  ra, float_to_bcd
+	
 	
 	fin_prog:
 		beq zero, zero, fin_prog
+		
+		
     ca2_bcd:
 
 	addi sp, sp, -24          #separar espacio stack
@@ -31,11 +39,12 @@ main:
     la  s2, cte_div       #cargar arrays
     add s4, s1, zero
                 
+	sw   zero, 0(s1)
     bge   s0, zero, positivo
 	sub   s0, zero, s0
-    
 	addi  t5, zero, 1
     sw    t5, 0(s1)
+	
     positivo:
 		addi  t0, zero, 0       # contador
 		addi  t1, zero, 10    
@@ -43,22 +52,20 @@ main:
 		array:
 			beq   t1, t0, fin_array   # i == 10
 			add   t2, t0, t0          
-			add   t2, t2, t2           # 4*i  offset
-			add   t2, t2, s2           # base + offset
+			add   t2, t2, t2           
+			add   t2, t2, s2           
 
 			add   a0, s0, zero           # dividendo
-			lw    a1, 0(t2)            # cte_div[i]  -> divisor
-
+			lw    a1, 0(t2)            # cte_div[i]  divisor
 			jal cociente
 
 			add   t4, t6, t6
 			add   t4, t4, t4           
-			add   t4, t4, s4           # base + offset
+			add   t4, t4, s4           
 			sw    a0, 0(t4)            # resultado_bcd[i]
 
 			add   a0, s0, zero         # recargar dividendo original
-			lw    a1, 0(t2)            # recargar divisor 
-
+			lw    a1, 0(t2)            # divisor 
 			jal residuo
 			add   s0, a0, zero
 
@@ -75,6 +82,8 @@ main:
     		sw zero, 60(s1)     # resultado_bcd[16] = 0
     		sw zero, 64(s1)		## resultado_bcd[17] = 0
 			
+			add  a0, s1, zero
+			
 			lw     s0, 20(sp)
 			lw     s1, 16(sp)
 			lw     s2, 12(sp)
@@ -82,34 +91,8 @@ main:
 			lw     s4, 4(sp)
 			lw     ra, 0(sp)
 			addi sp, sp, 24
-			add  a0, s1, zero
 			jr ra
 	
-	cociente: 
-		addi t3, zero, 0 
-		for1:
-				blt a0, a1, end1
-				sub a0, a0, a1
-				addi t3, t3, 1 
-				beq   zero, zero, for1
-		end1:
-			add a0, t3, zero
-			jr ra
-	residuo: 
-		for2:
-				blt a0, a1, end2
-				sub a0, a0, a1
-				beq   zero, zero, for2
-		end2:
-			add a0, a0, zero
-			jr ra
-
-	mult10:
-		add  t4, a0, a0     # t4 = a0*2
-   		add  t5, t4, t4     
-    	add  t5, t5, t5     # t5 = a0*8
-    	add  a0, t5, t4 
-		jr ra
 		
 
 	bcd_to_float:
@@ -121,17 +104,18 @@ main:
 		sw   ra, 0(sp)
 		
 		add   s0, a0, zero
-		add   s1, zero, 0		
+		add   s1, zero, 0	
+		addi  s3, zero, 0
 		addi  t0, zero, 1       # contador       
 		addi  t1, zero, 17
 		addi  s2, zero, 46
-		addi  s3, zero, 0
+		
 		
 		int:
 			add   t2, t0, t0          
         	add   t2, t2, t2           # 4*i  offset
-        	add   t2, t2, s0           # base + offset
-			
+        	add   t2, t2, s0           
+		
 			lw    t3, 0(t2)			   #cargar valor del array
 			
 			beq   t3, s2, fraction
@@ -164,7 +148,8 @@ main:
 			
 			beq zero, zero, fraction
 
-		
+	
+
 		fin_int:
 				fcvt.s.w  fa0, s1
 				fcvt.s.w  fa1, s3
@@ -190,10 +175,132 @@ main:
 				lw   ra, 0(sp)
 				addi sp, sp, 20
 				jr ra
+
 	
+	float_to_bcd:
+		addi sp, sp, -16
+		sw   ra, 0(sp)
+		
+		fmv.x.w  t1, fa0
+    	srli     t1, t1, 31
+   		sw       t1, 8(sp)
+
+		 
+		fmv.x.w  t1, fa0
+		slt      t1, t1, zero           # bits de fa0 vistos como entero con signo:
+										 # son negativos exactamente cuando el bit 31 es 1
+		sw       t1, 8(sp)
+
+		# ---- magnitud: fa1 = |fa0| ----
+		fmv.w.x  fa2, zero               # fa2 = 0.0
+		beq      t1, zero, ya_positivo
+		fsub.s   fa1, fa2, fa0           # fa0 negativo -> fa1 = 0.0 - fa0
+		beq      zero, zero, mag_lista
+		ya_positivo:
+			fmv.x.w  t3, fa0
+			fmv.w.x  fa1, t3                 # fa0 ya positivo -> solo copiar bits
+		mag_lista:
+		
+		
+		fcvt.w.s t0, fa1                # redondeo al mas cercano
+		fcvt.s.w ft2, t0
+		fsub.s   ft3, fa1, ft2          # resto = |x| - n
+
+										# si el resto quedo negativo, n se paso (bit 31 de ft3 = 1)
+		fmv.x.w  t2, ft3
+		srli     t2, t2, 31
+		beq      t2, zero, entero_ok
+		addi     t0, t0, -1
+		fcvt.s.w ft2, t0
+		fsub.s   ft3, fa1, ft2          # ft3 = fraccion en [0,1)
+		
+		
+		entero_ok:
+			add  a0, t0, zero
+			jal  ra, ca2_bcd                # a1 ya trae el buffer; devuelve a0 = base
+
+			lw   t1, 8(sp)
+			sw   t1, 0(a0)                  # signo tomado del float, no del entero
+
+			addi  a1, a0, 48                # fraccion -> buffer[12]
+			fmv.x.w t3, ft3                 # copiar bits de ft3 -> entero
+			fmv.w.x fa0, t3                 # ... y de entero -> fa0
+			jal   ra, frac_bcd
+
+			lw   ra, 0(sp)
+			addi sp, sp, 16
+			jr   ra
+ 
+	
+		frac_bcd:
+			addi t1, zero, 0
+			addi t2, zero, 5
+
+		loop_frac:
+			beq  t1, t2, fin_frac
+
+			la     t4, f10
+			flw    ft0, 0(t4)
+			fmul.s fa0, fa0, ft0            # fa0 = fa0 * 10  -> [0,10)
+
+			la     t4, fhalf
+			flw    ft1, 0(t4)
+			fsub.s fa2, fa0, ft1            # fa0 - 0.499999
+
+			fcvt.w.s t5, fa2                # redondear(x-0.499999) == piso(x)
+
+			blt  t5, zero, cero_digito
+			beq  zero, zero, guardar_digito
+
+		cero_digito:
+			addi t5, zero, 0
+
+		guardar_digito:
+			sw   t5, 0(a1)                  # digito CRUDO (sin +48)
+			addi a1, a1, 4
+
+			fcvt.s.w fa3, t5
+			fsub.s   fa0, fa0, fa3          # quitar el digito ya extraido
+
+			addi t1, t1, 1
+			beq  zero, zero, loop_frac
+
+		fin_frac:
+			jr   ra
+
+	cociente: 
+		addi t3, zero, 0 
+		for1:
+				blt a0, a1, end1
+				sub a0, a0, a1
+				addi t3, t3, 1 
+				beq   zero, zero, for1
+		end1:
+			add a0, t3, zero
+			jr ra
+	residuo: 
+		for2:
+				blt a0, a1, end2
+				sub a0, a0, a1
+				beq   zero, zero, for2
+		end2:
+			add a0, a0, zero
+			jr ra
+
+	mult10:
+		add  t4, a0, a0     # t4 = a0*2
+   		add  t5, t4, t4     
+    	add  t5, t5, t5     # t5 = a0*8
+    	add  a0, t5, t4 
+		jr ra	
 	
 		
 .data
 prueba: .word -2147483647
 cte_div: .word 1000000000,100000000, 10000000, 1000000, 100000, 10000, 1000, 100, 10, 1
 resultado_bcd: .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+resultado_bcd2:.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ 
+f10:.float 10.0
+ 
+fhalf:.float 0.499999
