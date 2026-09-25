@@ -3,32 +3,149 @@ _start:
 .text
 main:
     addi     sp, zero, 0x600
+	beq  zero, zero, loop_calculadora
 	
-	#entero BCD
-    #lw    	  a0, prueba
-    #la       a1, resultado_bcd 
-    #jal   ra, ca2_bcd   
-	
-	#float  BCD
-	
-    la   a1, resultado_bcd
-    la   t0, prueba
-    flw  fa0, 0(t0)
-	jal  ra, float_to_bcd
+	loop_calculadora:
 
-	
-	#BCD float
-    jal  ra, bcd_to_float
-	fmv.s fs0, fa0
-	
+		la   a0, msg_num1
+		jal  ra, imprimir_cadena
 
-	
-	
-	fin_prog:
-		beq zero, zero, fin_prog
+		la   a0, entrada
+		jal  ra, leer_numero
+
+		la   a0, entrada
+		la   a1, resultado_bcd
+		jal  ra, ascii_a_bcd
+
+		la   a0, resultado_bcd
+		jal  ra, bcd_to_float
+		fmv.s fs0, fa0                # primer operando guardado en fs0
+
+		la   a0, msg_num2
+		jal  ra, imprimir_cadena
+
+		la   a0, entrada
+		jal  ra, leer_numero
+
+		la   a0, entrada
+		la   a1, resultado_bcd
+		jal  ra, ascii_a_bcd
+
+		la   a0, resultado_bcd
+		jal  ra, bcd_to_float
+		fmv.s fs1, fa0 
+		
+		la   a0, msg_op
+		jal  ra, imprimir_cadena
+
+		jal  ra, LeerCaracterUART      # a0 = caracter del operador
+		add  t6, a0, zero              # se guarda para comparar despues del eco
+		jal  ra, WriteUART             # eco del operador en pantalla
+
+		addi t1, zero, 43              # '+'
+		beq  t6, t1, op_suma
+		addi t1, zero, 45              # '-'
+		beq  t6, t1, op_resta
+		addi t1, zero, 42              # '*'
+		beq  t6, t1, op_mult
+		addi t1, zero, 47              # '/'
+		beq  t6, t1, op_div
+		beq  zero, zero, op_suma       # operador no reconocido -> suma por defecto
+
+		op_suma:
+			fadd.s fa0, fs0, fs1
+			beq  zero, zero, op_mostrar
+		op_resta:
+			fsub.s fa0, fs0, fs1
+			beq  zero, zero, op_mostrar
+		op_mult:
+			fmul.s fa0, fs0, fs1
+			beq  zero, zero, op_mostrar
+		op_div:
+			fdiv.s fa0, fs0, fs1
+
+		op_mostrar:
+			la   a1, resultado_bcd
+			jal  ra, float_to_bcd          # llena resultado_bcd con el resultado
+
+			la   a0, msg_res
+			jal  ra, imprimir_cadena
+
+			la   a0, resultado_bcd
+			jal  ra, mostrar_bcd
+
+			la   a0, msg_nl
+			jal  ra, imprimir_cadena
+			
+			beq  zero, zero, loop_calculadora
+			
+			
+	#Lee caracteres hasta Enter.Todo lo demas se ignora. Maneja backspace
+	#ARGS
+	#a0: puntero arreglo entrada usuario
+	#RET
+	#a0: posicion arreglo 17 posiciones salida
+	leer_numero:
+    addi sp, sp, -12
+    sw   s0, 8(sp)          # cursor de escritura actual
+    sw   s1, 4(sp)          # inicio puntero entrada
+    sw   ra, 0(sp)
+ 
+    add  s0, a0, zero
+    add  s1, a0, zero
+ 
+    ln_loop:
+        jal  ra, LeerCaracterUART
+ 
+        addi t1, zero, 13
+        beq  a0, t1, ln_fin
+        addi t1, zero, 10
+        beq  a0, t1, ln_fin
+ 
+        addi t1, zero, 127
+        bne  a0, t1, ln_check_digito
+            beq  s0, s1, ln_loop        # buffer vacio, no hay nada que borrar
+            addi s0, s0, -4
+            jal  ra, DELChar
+            beq  zero, zero, ln_loop
+ 
+    ln_check_digito:
+        addi t1, zero, 48
+        blt  a0, t1, ln_check_signo
+        addi t2, zero, 57
+        blt  t2, a0, ln_check_signo
+        beq  zero, zero, ln_guardar
+ 
+    ln_check_signo:
+        addi t1, zero, 45              # '-'
+        beq  a0, t1, ln_guardar
+        addi t1, zero, 46              # '.'
+        beq  a0, t1, ln_guardar
+        beq  zero, zero, ln_loop       # caracter invalido: se ignora, sin eco
+ 
+    ln_guardar:
+        sw   a0, 0(s0)
+        addi s0, s0, 4
+        jal  ra, WriteUART             # eco del caracter aceptado
+        beq  zero, zero, ln_loop
+ 
+    ln_fin:
+        sw   zero, 0(s0)               # terminador
+ 
+        lw   s0, 8(sp)
+        lw   s1, 4(sp)
+        lw   ra, 0(sp)
+        addi sp, sp, 12
+        jr   ra
 		
 		
-    ca2_bcd:
+	#Convierte numeros en CA2 a un arreglo BCD en formato signo[1],int[10],punto[1],float[5]
+	#ARGS
+	#a0: int procesado
+	#a1: posicion arreglo 17 posiciones entrada
+	#RET
+	#a0: posicion arreglo 17 posiciones salida
+    ca2_bcd:				
 
 	addi sp, sp, -24          #separar espacio stack
     sw   s0, 20(sp)
@@ -98,7 +215,11 @@ main:
 			jr ra
 	
 		
-
+	#Convierte el formato de BCD declarado a un float 
+	#ARGS
+	#a0: arreglo 17 posiciones entrada
+	#RET
+	#fa0: float procesado
 	bcd_to_float:
 		addi sp, sp, -20          #separar espacio stack
 		sw   s0, 16(sp)
@@ -180,7 +301,13 @@ main:
 				addi sp, sp, 20
 				jr ra
 
-	
+
+	#Convierte un float al formato de BCD declarado
+	#ARGS
+	#fa0: float procesado
+	#a1: arreglo 17 posiciones entrada	
+	#RET
+	#a0: posicion arreglo 17 posiciones salida
 	float_to_bcd:
 		addi sp, sp, -16
 		sw   ra, 0(sp)
@@ -238,7 +365,6 @@ main:
 	loop_frac:
 		beq  t1, t2, fin_frac
 
-		# Multiplicar por 10
 		la   t4, f10
 		flw  ft0, 0(t4)
 		fmul.s fa0, fa0, ft0
@@ -258,7 +384,6 @@ main:
 		addi t5, zero, 0
 
 	guardar_digito:
-		# Guardar digito directamente (sin +48)
 		sw   t5, 0(a1)
 		addi a1, a1, 4
 
@@ -273,9 +398,38 @@ main:
 		lw   ra, 0(sp)
 		addi sp, sp, 16
 		jr   ra
+
+	
+	ReadUART: # retorna en a0 caracter entrado
+		la t0, ReadAddrUART
+		lw t0, 0(t0) # Carga en t0 direccion UART
+		lw a0, 0(t0)
+		jr ra
+	WriteUART: # recibe en a0 caracter a escribir
+		la t0, WriteAddrUART
+		lw t0, 0(t0) # Carga en t0 direccion UART
+		sw a0, 0(t0)
+		jr ra
+	DELChar: # borra un caracter de la pantalla
+		addi sp, sp, -4
+		sw ra, 0(sp) # Push ra
+		addi a0, zero, 0x8 # caracter retroceso
+		jal WriteUART
+		addi a0, zero, 0x20 # caracter espacio en blanco
+		jal WriteUART
+		addi a0, zero, 0x8 # caracter retroceso
+		jal WriteUART
+		lw ra, 0(sp) # Pop ra
+		addi sp, sp, 4
+		jr ra
 		
 		
-		
+	#Divide dos numeros
+	#ARGS
+	#a0: divisor
+	#a1: dividendo	
+	#RET
+	#a0: cociente
 	cociente: 
 		addi t3, zero, 0 
 		for1:
@@ -286,6 +440,13 @@ main:
 		end1:
 			add a0, t3, zero
 			jr ra
+			
+	#residuo de una division
+	#ARGS
+	#a0: divisor
+	#a1: dividendo	
+	#RET
+	#a0: residuo
 	residuo: 
 		for2:
 				blt a0, a1, end2
@@ -295,6 +456,11 @@ main:
 			add a0, a0, zero
 			jr ra
 
+	#multiplica por 10
+	#ARGS
+	#a0: numero a multiplicar
+	#RET
+	#a0: a0*10
 	mult10:
 		add  t4, a0, a0     # t4 = a0*2
    		add  t5, t4, t4     
@@ -304,11 +470,17 @@ main:
 	
 		
 .data
-prueba: .float -8724.5
 cte_div: .word 1000000000,100000000, 10000000, 1000000, 100000, 10000, 1000, 100, 10, 1
 resultado_bcd: .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 resultado_bcd2:.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
- 
+entrada: .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 f10:.float 10.0
- 
 fhalf:.float 0.499999
+OchoMil: .word 0x8000
+ReadAddrUART: .dc.l 0xff201000
+WriteAddrUART: .dc.l 0xff201000
+msg_num1: .word 78,117,109,49,58,32,0        # "Num1: "
+msg_num2: .word 78,117,109,50,58,32,0        # "Num2: "
+msg_op:   .word 79,112,58,32,0               # "Op: "
+msg_res:  .word 61,32,0                      # "= "
+msg_nl:   .word 13,10,0                      # salto de linea
