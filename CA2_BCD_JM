@@ -80,65 +80,321 @@ main:
 			beq  zero, zero, loop_calculadora
 			
 			
-	#Lee caracteres hasta Enter.Todo lo demas se ignora. Maneja backspace
+	# imprimir_cadena: 
+	# a0 = puntero arreglo ascii indicacion
+	# ASCII de cada caracter, terminado en 0. Los va sacando por UART.
+	imprimir_cadena:
+		addi sp, sp, -12
+		sw   s0, 8(sp)
+		sw   s1, 4(sp)
+		sw   ra, 0(sp)
+
+		add  s0, a0, zero
+
+		ip_loop:
+			lw   s1, 0(s0)
+			beq  s1, zero, ip_fin
+			add  a0, s1, zero
+			jal  ra, WriteUART
+			addi s0, s0, 4
+			beq  zero, zero, ip_loop
+
+		ip_fin:
+			lw   s0, 8(sp)
+			lw   s1, 4(sp)
+			lw   ra, 0(sp)
+			addi sp, sp, 12
+			jr   ra
+		
+	
+	# Acepta digitos 0-9,'-' y '.'
 	#ARGS
-	#a0: puntero arreglo entrada usuario
+	# a0: puntero arreglo con la entrada. 
 	#RET
-	#a0: posicion arreglo 17 posiciones salida
+	#a0: puntero arreglo donde se guarda la entrada
+	
 	leer_numero:
-    addi sp, sp, -12
-    sw   s0, 8(sp)          # cursor de escritura actual
-    sw   s1, 4(sp)          # inicio puntero entrada
-    sw   ra, 0(sp)
- 
-    add  s0, a0, zero
-    add  s1, a0, zero
- 
-    ln_loop:
-        jal  ra, LeerCaracterUART
- 
-        addi t1, zero, 13
-        beq  a0, t1, ln_fin
-        addi t1, zero, 10
-        beq  a0, t1, ln_fin
- 
-        addi t1, zero, 127
-        bne  a0, t1, ln_check_digito
-            beq  s0, s1, ln_loop        # buffer vacio, no hay nada que borrar
-            addi s0, s0, -4
-            jal  ra, DELChar
-            beq  zero, zero, ln_loop
- 
-    ln_check_digito:
-        addi t1, zero, 48
-        blt  a0, t1, ln_check_signo
-        addi t2, zero, 57
-        blt  t2, a0, ln_check_signo
-        beq  zero, zero, ln_guardar
- 
-    ln_check_signo:
-        addi t1, zero, 45              # '-'
-        beq  a0, t1, ln_guardar
-        addi t1, zero, 46              # '.'
-        beq  a0, t1, ln_guardar
-        beq  zero, zero, ln_loop       # caracter invalido: se ignora, sin eco
- 
-    ln_guardar:
-        sw   a0, 0(s0)
-        addi s0, s0, 4
-        jal  ra, WriteUART             # eco del caracter aceptado
-        beq  zero, zero, ln_loop
- 
-    ln_fin:
-        sw   zero, 0(s0)               # terminador
- 
-        lw   s0, 8(sp)
-        lw   s1, 4(sp)
-        lw   ra, 0(sp)
-        addi sp, sp, 12
-        jr   ra
+		addi sp, sp, -12
+		sw   s0, 8(sp)          # cursor de escritura actual
+		sw   s1, 4(sp)          
+		sw   ra, 0(sp)
+
+		add  s0, a0, zero
+		add  s1, a0, zero
+
+		ln_loop:
+			jal  ra, LeerCaracterUART
+
+			addi t1, zero, 13
+			beq  a0, t1, ln_fin
+			addi t1, zero, 10
+			beq  a0, t1, ln_fin
+
+			addi t1, zero, 127
+			bne  a0, t1, ln_check_digito
+			beq  s0, s1, ln_loop        # entrada vacia, nada que borrar
+			addi s0, s0, -4
+			jal  ra, DELChar
+			beq  zero, zero, ln_loop
+
+		ln_check_digito:
+			addi t1, zero, 48
+			blt  a0, t1, ln_check_signo
+			addi t2, zero, 57
+			blt  t2, a0, ln_check_signo
+			beq  zero, zero, ln_guardar
+
+		ln_check_signo:
+			addi t1, zero, 45              # '-'
+			beq  a0, t1, ln_guardar
+			addi t1, zero, 46              # '.'
+			beq  a0, t1, ln_guardar
+			beq  zero, zero, ln_loop       # caracter invalido: se ignora, sin eco
+
+		ln_guardar:
+			sw   a0, 0(s0)
+			addi s0, s0, 4
+			jal  ra, WriteUART             # eco del caracter aceptado
+			beq  zero, zero, ln_loop
+
+		ln_fin:
+			sw   zero, 0(s0)               # terminador
+
+			lw   s0, 8(sp)
+			lw   s1, 4(sp)
+			lw   ra, 0(sp)
+			addi sp, sp, 12
+			jr   ra
+	
+
+	
+	# Acepta digitos 0-9,'-' y '.'
+	#ARGS
+	#a0: puntero cadena ASCII (salida leer_numero)
+	#a1 = puntero arreglo BCD formato general
+	#RET
+	#a0: puntero arreglo BCD formato general
+	
+	ascii_a_bcd:
+		addi sp, sp, -28
+		sw   s0, 24(sp)     # cursor  entrada
+		sw   s1, 20(sp)     # base arreglo destino
+		sw   s2, 16(sp)     # signo
+		sw   s3, 12(sp)     # cantidad de enteros 
+		sw   s4,  8(sp)     # slot actual / contador de decimales
+		sw   s5,  4(sp)     # inicio de los digitos enteros (para la segunda pasada)
+		sw   ra,  0(sp)
+
+		add  s1, a1, zero
+
+		# reset BCD
+		addi t0, zero, 0
+		az_limpiar:
+			addi t1, zero, 17
+			beq  t0, t1, az_limpiar_fin
+			add  t2, t0, t0
+			add  t2, t2, t2
+			add  t2, t2, s1
+			sw   zero, 0(t2)
+			addi t0, t0, 1
+			beq  zero, zero, az_limpiar
+			
+		az_limpiar_fin:
 		
+		add  s0, a0, zero
+		addi s2, zero, 0
+
+		lw   t0, 0(s0)
+		addi t1, zero, 45               # '-'
+		bne  t0, t1, az_sin_signo
+		addi s2, zero, 1
+		addi s0, s0, 4
 		
+		az_sin_signo:
+		sw   s2, 0(s1)
+		add  s5, s0, zero               # aca empiezan los digitos de la parte entera
+
+		# --- primera pasada: contar cuantos digitos enteros hay ---
+		addi s3, zero, 0
+		az_contar:
+			lw   t0, 0(s0)
+			beq  t0, zero, az_contar_fin
+			addi t1, zero, 46           # '.'
+			beq  t0, t1, az_contar_fin
+			addi s3, s3, 1
+			addi s0, s0, 4
+			beq  zero, zero, az_contar
+		az_contar_fin:
+
+		addi t1, zero, 10
+		blt  s3, t1, az_sin_recorte
+			addi s3, zero, 10           # se recortan a 10 los digitos enteros
+		az_sin_recorte:
+
+		# --- segunda pasada: guardar alineado a la derecha (slot 10 = unidades) ---
+		add  s0, s5, zero
+		addi t3, zero, 11
+		sub  s4, t3, s3                 # s4 = slot inicial = 11 - n_int
+
+		az_guardar_ent:
+			lw   t0, 0(s0)
+			addi t1, zero, 46
+			beq  t0, t1, az_ent_fin
+			beq  t0, zero, az_ent_fin
+
+			addi t1, zero, 11
+			blt  s4, t1, az_ent_guarda
+				beq zero, zero, az_ent_salta     # ya se llenaron los 10 slots
+
+			az_ent_guarda:
+				add  t2, s4, s4
+				add  t2, t2, t2
+				add  t2, t2, s1
+				addi t4, zero, 48
+				sub  t5, t0, t4
+				sw   t5, 0(t2)
+
+			az_ent_salta:
+				addi s4, s4, 1
+				addi s0, s0, 4
+				beq  zero, zero, az_guardar_ent
+
+		az_ent_fin:
+			addi t2, zero, 44               # offset del slot 11 (11*4)
+			add  t2, t2, s1
+			addi t5, zero, 46
+			sw   t5, 0(t2)                  # marcador de punto, fijo en el slot 11
+
+			lw   t0, 0(s0)
+			addi t1, zero, 46
+			bne  t0, t1, az_sin_punto
+				addi s0, s0, 4               # si habia un punto, lo saltamos
+		az_sin_punto:
+
+		# --- parte decimal: se guarda en orden, maximo 5 digitos ---
+		addi s4, zero, 0
+		az_guardar_frac:
+			lw   t0, 0(s0)
+			beq  t0, zero, az_frac_fin
+			addi t1, zero, 5
+			beq  s4, t1, az_frac_fin
+
+			addi t3, zero, 12
+			add  t2, s4, t3
+			add  t2, t2, t2
+			add  t2, t2, t2
+			add  t2, t2, s1
+			addi t4, zero, 48
+			sub  t5, t0, t4
+			sw   t5, 0(t2)
+
+			addi s4, s4, 1
+			addi s0, s0, 4
+			beq  zero, zero, az_guardar_frac
+		az_frac_fin:
+
+		lw   s0, 24(sp)
+		lw   s1, 20(sp)
+		lw   s2, 16(sp)
+		lw   s3, 12(sp)
+		lw   s4,  8(sp)
+		lw   s5,  4(sp)
+		lw   ra,  0(sp)
+		addi sp, sp, 28
+		jr   ra
+
+	#Integra ReadUART para leer en bucle garantizando datos nuevos de forma reutilizable
+	#ARGS
+	#RET
+	#a0: Retorna en a0 el caracter
+	LeerCaracterUART:
+		addi sp, sp, -4
+		sw   ra, 0(sp)
+
+		lc_sondeo:
+			jal  ra, ReadUART
+			la   t0, OchoMil
+			lw   t0, 0(t0)
+			and  t0, t0, a0
+			beq  t0, zero, lc_sondeo    # bit de "dato disponible" en 0 -> reintenta
+
+		andi a0, a0, 0xFF
+
+		lw   ra, 0(sp)
+		addi sp, sp, 4
+		jr   ra
+	
+	
+	
+	#Imprime el arreglo BCD por UART como numero legible, sin ceros a la izquierda en la parte entera.
+	#ARGS
+	#a0 = puntero  arreglo BCD 
+	#RET
+	mostrar_bcd:
+		addi sp, sp, -16
+		sw   s0, 12(sp)
+		sw   s1, 8(sp)
+		sw   s2, 4(sp)
+		sw   ra, 0(sp)
+
+		add  s0, a0, zero
+
+		lw   t0, 0(s0)
+		beq  t0, zero, mb_sin_signo
+			addi a0, zero, 45
+			jal  ra, WriteUART
+		mb_sin_signo:
+
+		addi s1, zero, 1
+		mb_buscar:
+			addi t1, zero, 10
+			beq  s1, t1, mb_encontrado    # llegamos a las unidades: se imprime si o si
+			add  t2, s1, s1
+			add  t2, t2, t2
+			add  t2, t2, s0
+			lw   t3, 0(t2)
+			bne  t3, zero, mb_encontrado
+			addi s1, s1, 1
+			beq  zero, zero, mb_buscar
+		mb_encontrado:
+
+		mb_imprimir_ent:
+			addi t1, zero, 11
+			beq  s1, t1, mb_punto
+			add  t2, s1, s1
+			add  t2, t2, t2
+			add  t2, t2, s0
+			lw   t3, 0(t2)
+			addi a0, t3, 48
+			jal  ra, WriteUART
+			addi s1, s1, 1
+			beq  zero, zero, mb_imprimir_ent
+
+		mb_punto:
+			addi a0, zero, 46
+			jal  ra, WriteUART
+
+			addi s2, zero, 12
+		mb_imprimir_frac:
+			addi t1, zero, 17
+			beq  s2, t1, mb_fin
+			add  t2, s2, s2
+			add  t2, t2, t2
+			add  t2, t2, s0
+			lw   t3, 0(t2)
+			addi a0, t3, 48
+			jal  ra, WriteUART
+			addi s2, s2, 1
+			beq  zero, zero, mb_imprimir_frac
+
+		mb_fin:
+			lw   s0, 12(sp)
+			lw   s1, 8(sp)
+			lw   s2, 4(sp)
+			lw   ra, 0(sp)
+			addi sp, sp, 16
+			jr   ra
+	
 	#Convierte numeros en CA2 a un arreglo BCD en formato signo[1],int[10],punto[1],float[5]
 	#ARGS
 	#a0: int procesado
